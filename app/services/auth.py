@@ -1,5 +1,6 @@
 import secrets
 import bcrypt
+import uuid
 from sqlalchemy.orm import Session
 from app.models.user import User
 
@@ -23,12 +24,26 @@ def register_user(db: Session, email: str, password: str):
         return None
 
     user = User(
+        id=str(uuid.uuid4()),
         email=email,
         password=hash_password(password),
-        api_key=generate_api_key()
+        api_key=generate_api_key(),
+        subscription_id=str(uuid.uuid4())
     )
 
     db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+def update_user_wallet(db: Session, user_id: str, wallet_id: str):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return None
+
+    user.wallet_id = wallet_id
+
     db.commit()
     db.refresh(user)
 

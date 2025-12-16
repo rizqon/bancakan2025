@@ -6,6 +6,11 @@ services:
   
     build: .
     container_name: backend-api
+    environment:
+      - LAGO_BACKEND_URL=${LAGO_BACKEND_URL}
+      - LAGO_API_KEY=${LAGO_ORG_API_KEY}
+      - LAGO_PLAN_CODE=${LAGO_PLAN_CODE}
+      - LAGO_BILLABLE_METRIC_CODE=${LAGO_BILLABLE_METRIC_CODE}
     ports:
       - "8000:8000"
     volumes:
@@ -141,18 +146,13 @@ services:
       - .env
     environment:
       - API_URL=${LAGO_API_URL:-http://localhost:3000}
+      - LAGO_DISABLE_PDF_GENERATION=true
       - APP_ENV=production
     depends_on:
       lago-api:
         condition: service_healthy
         restart: true
     restart: unless-stopped
-
-  # ==================================================
-  # LAGO - PDF
-  # ==================================================
-  lago-pdf:
-    image: getlago/lago-gotenberg:7.8.2
 
 volumes:
   lago_postgres:
