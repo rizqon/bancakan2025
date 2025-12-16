@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+sqlalchemy
+passlib[bcrypt]
+httpx
+lago-python-client

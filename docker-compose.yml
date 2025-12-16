@@ -1,0 +1,160 @@
+services:
+  # ==================================================
+  # FASTAPI - API PRODUCT
+  # ==================================================
+  backend-api:
+  
+    build: .
+    container_name: backend-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./data:/data
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
+  # ==================================================
+  # LAGO - POSTGRESQL
+  # ==================================================
+  lago-db:
+    image: postgres:14-alpine
+    container_name: lago-db
+    env_file:
+      - .env
+    volumes:
+      - lago_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==================================================
+  # LAGO - REDIS
+  # ==================================================
+  lago-redis:
+    image: redis:6-alpine
+    container_name: lago-redis
+    volumes:
+      - lago_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==================================================
+  # LAGO - API
+  # ==================================================
+  lago-api:
+    image: getlago/api:v1.38.0
+    container_name: lago-api
+    ports:
+      - "${API_PORT:-3000}:3000"
+    env_file:
+      - .env
+    depends_on:
+      lago-migrate:
+        condition: service_completed_successfully
+      lago-db:
+        condition: service_healthy
+      lago-redis:
+        condition: service_started
+    command: ["./scripts/start.api.sh"]
+    healthcheck:
+      test: curl -f http://localhost:3000/health || exit 1
+      interval: 10s
+      start_period: 30s
+      timeout: 60s
+      start_interval: 2s
+    restart: unless-stopped
+
+  lago-worker:
+    image: getlago/api:v1.38.0
+    container_name: lago-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      lago-migrate:
+        condition: service_completed_successfully
+      lago-db:
+        condition: service_healthy
+        restart: true
+      lago-redis:
+        condition: service_healthy
+        restart: true
+    command: ["./scripts/start.worker.sh"]
+    healthcheck:
+      test: curl -f http://localhost:8080 || exit 1
+      interval: 10s
+      start_period: 30s
+      timeout: 60s
+      start_interval: 2s
+    volumes:
+      - lago_storage_data:/app/storage
+
+  lago-clock:
+    image: getlago/api:v1.38.0
+    container_name: lago-clock
+    env_file:
+      - .env
+    depends_on:
+      lago-migrate:
+        condition: service_completed_successfully
+      lago-db:
+        condition: service_healthy
+        restart: true
+      lago-redis:
+        condition: service_healthy
+        restart: true
+    command: ["./scripts/start.clock.sh"]
+    restart: unless-stopped
+  
+  lago-migrate:
+    image: getlago/api:v1.38.0
+    container_name: lago-migrate
+    depends_on:
+      lago-db:
+        condition: service_healthy
+        restart: true
+    command: ["./scripts/migrate.sh"]
+    env_file:
+      - .env
+      
+
+  # ==================================================
+  # LAGO - FRONTEND (UI)
+  # ==================================================
+  lago-front:
+    image: getlago/front:v1.38.0
+    container_name: lago-front
+    ports:
+      - "${FRONT_PORT:-80}:80"
+    env_file:
+      - .env
+    environment:
+      - API_URL=${LAGO_API_URL:-http://localhost:3000}
+      - APP_ENV=production
+    depends_on:
+      lago-api:
+        condition: service_healthy
+        restart: true
+    restart: unless-stopped
+
+  # ==================================================
+  # LAGO - PDF
+  # ==================================================
+  lago-pdf:
+    image: getlago/lago-gotenberg:7.8.2
+
+volumes:
+  lago_postgres:
+  lago_redis:
+  lago_storage_data:
